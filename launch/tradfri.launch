@@ -1,0 +1,12 @@
+<launch>
+	<arg name="gateway_addr"/>
+
+	<node name="lights" type="tradfri_node.py" pkg="tradfri_ros" clear_params="true" output="screen" required="true">
+		<param name="gateway" value="$(arg gateway_addr)"/>
+		<param name="psk_config_file" value="$(find tradfri_ros)/config/tradfri_psk.conf"/>
+
+		<rosparam command="load" file="$(find tradfri_ros)/config/device_map.yaml"/>
+
+		<param name="transition_time" value="0.2"/>
+	</node>
+</launch>

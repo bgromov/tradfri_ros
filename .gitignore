@@ -1,0 +1,7 @@
+# Security keys
+config/tradfri_psk.conf
+
+# Temporary and binary files
+*.pyc
+*~
+*.swp
