@@ -1,0 +1,5 @@
+# Security keys
+tradfri_psk.conf
+
+# Device map (generated automatically)
+device_map.yaml
