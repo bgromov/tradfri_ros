@@ -15,6 +15,7 @@ from pytradfri.error import *
 from pytradfri.util import load_json, save_json
 
 import rospy
+import rosparam
 import rospkg
 
 from std_msgs.msg import ColorRGBA
@@ -32,9 +33,45 @@ class TradfriAsyncRos:
         rospack = rospkg.RosPack()
         self.psk_config_file = rospy.get_param('~psk_config_file', rospack.get_path('tradfri_ros') + '/config/tradfri_psk.conf')
 
+        if not self.lights_param:
+            rospy.logwarn('\'lights\' parameter (device map) is not set, will attempt to load it from file')
+
+            self.device_map_file = rospy.get_param('~device_map_file', rospack.get_path('tradfri_ros') + '/config/device_map.yaml')
+            if self.device_map_file:
+                if not self.load_device_map(self.device_map_file):
+                    rospy.logwarn('Failed to load device map, will use default mappings')
+            else:
+                rospy.logwarn('Device map file was not specified, will use default mappings')
+
         self.conf = load_json(self.psk_config_file)
         self.connected = False
         self.color_cmd = None
+
+    def load_device_map(self, fname):
+        try:
+            params = rosparam.load_file(fname)[0][0]
+            if 'lights' in params:
+                lights = params
+                for k,v in params['lights'].items():
+                    try:
+                        light_id = int(k, 16)
+                        alias = v['alias_id']
+                    except ValueError:
+                        rospy.logerr(f'Failed to load device map config: device ID should be hexadecimal, but \'{k}\' value was found instead')
+                        return False
+                    except KeyError:
+                        rospy.logerr(f'Failed to load device map config: missing alias_id key')
+                        return False
+
+                rosparam.upload_params(rospy.get_name(), lights)
+            else:
+                rospy.logerr(f'Failed to load device map config: unable to find \'lights\' parameter')
+                return False
+        except Exception as e:
+            rospy.logerr(f'Failed to load device map config: {e}')
+            return False
+
+        return True
 
     async def init_api(self):
         try:
