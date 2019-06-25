@@ -1,6 +1,9 @@
 # Security keys
 config/tradfri_psk.conf
 
+# Device map (generated automatically)
+config/device_map.yaml
+
 # Temporary and binary files
 *.pyc
 *~
