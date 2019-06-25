@@ -96,7 +96,7 @@ class TradfriAsyncRos:
 
         if not self.lights_param:
             # if no lights configured, set the param with default values
-            self.lights_param = {k: {'alias': idx+1} for idx, k in enumerate(self.lights.keys())}
+            self.lights_param = {k: {'alias_id': idx+1} for idx, k in enumerate(self.lights.keys())}
             rospy.set_param('~lights', self.lights_param)
 
         # Print all lights
@@ -127,7 +127,7 @@ class TradfriAsyncRos:
         self.pubs_color = {}
         for dev_id, params in self.lights_param.items():
             func = partial(self.set_color_cb, dev_id=dev_id)
-            sub = rospy.Subscriber('light{}/set_color'.format(params['alias']), ColorRGBA, func)
+            sub = rospy.Subscriber('light{}/set_color'.format(params['alias_id']), ColorRGBA, func)
             self.subs_set_color.append(sub)
 
         if len(self.lights_param):
