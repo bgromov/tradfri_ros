@@ -52,22 +52,21 @@ class TradfriAsyncRos:
                 self.conf[self.gateway_address] = {'identity': identity,
                                    'key': psk}
                 save_json(self.psk_config_file, self.conf)
-                rospy.logwarn(f'Generated PSK was stored to {self.psk_config_file}')
+                rospy.logwarn(f'Generated PSK was stored in {self.psk_config_file}')
 
             except AttributeError:
                 rospy.logfatal("Please provide the 'Security Code' from the "
                                "back of your Tradfri gateway using the "
                                "~security_code param.")
                 raise
+
             except RequestTimeout as e:
-                rospy.logfatal(e.message)
+                rospy.logfatal(e)
                 raise
 
             except Exception as e:
-                rospy.logfatal("Unknown error occurred. Make sure to provide the "
-                               "correct 'Security Code' to ~security_code param and "
-                               "gateway IP address to ~gateway_address")
-                sys.exit(-1)
+                rospy.logfatal('Unknown error occurred')
+                raise
 
         self.api = api_factory.request
 
