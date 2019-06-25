@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import sys
 import uuid
 import asyncio
 import copy
@@ -20,8 +21,8 @@ from std_msgs.msg import ColorRGBA
 
 class TradfriAsyncRos:
     def __init__(self):
-        self.gateway = rospy.get_param('~gateway')
-        self.key = rospy.get_param('~key', None)
+        self.gateway_address = rospy.get_param('~gateway_address')
+        self.psk_key = rospy.get_param('~psk_key', None)
 
         self.lights_param = rospy.get_param('~lights', None)
 
@@ -37,33 +38,43 @@ class TradfriAsyncRos:
 
     async def init_api(self):
         try:
-            identity = self.conf[self.gateway].get('identity')
-            psk = self.conf[self.gateway].get('key')
-            api_factory = APIFactory(host=self.gateway, psk_id=identity, psk=psk)
+            identity = self.conf[self.gateway_address].get('identity')
+            psk = self.conf[self.gateway_address].get('key')
+            api_factory = APIFactory(host=self.gateway_address, psk_id=identity, psk=psk)
         except KeyError:
             identity = uuid.uuid4().hex
-            api_factory = APIFactory(host=self.gateway, psk_id=identity)
+            api_factory = APIFactory(host=self.gateway_address, psk_id=identity)
 
             try:
-                psk = await api_factory.generate_psk(self.key)
+                psk = await api_factory.generate_psk(self.psk_key)
                 # rospy.loginfo('Generated PSK: {}'.format(psk))
 
-                self.conf[self.gateway] = {'identity': identity,
+                self.conf[self.gateway_address] = {'identity': identity,
                                    'key': psk}
                 save_json(self.psk_config_file, self.conf)
                 rospy.logwarn(f'Generated PSK was stored to {self.psk_config_file}')
 
             except AttributeError:
-                raise rospy.logfatal("Please provide the 'Security Code' from the "
-                                     "back of your Tradfri gateway using the "
-                                     "~key param.")
+                rospy.logfatal("Please provide the 'Security Code' from the "
+                               "back of your Tradfri gateway using the "
+                               "~psk_key param.")
+                raise
+            except RequestTimeout as e:
+                rospy.logfatal(e.message)
+                raise
+
+            except Exception as e:
+                rospy.logfatal("Unknown error occurred. Make sure to provide the "
+                               "correct 'Security Code' to ~psk_key param and "
+                               "gateway IP address to ~gateway_address")
+                sys.exit(-1)
 
         self.api = api_factory.request
 
         # Connect to gateway and get configured devices (these are not necessarily available)
         while not self.connected and not rospy.is_shutdown():
             try:
-                rospy.loginfo('Connecting to gateway: {}'.format(self.gateway))
+                rospy.loginfo(f'Connecting to gateway: {self.gateway_address}')
                 gateway = Gateway()
 
                 devices_command = gateway.get_devices()
