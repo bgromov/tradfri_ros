@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import sys
+
 import uuid
 import argparse
 import threading
@@ -22,14 +24,14 @@ from std_msgs.msg import ColorRGBA
 
 class TradfriRos:
     def __init__(self):
-        self.publish_rate = rospy.get_param('~publish_rate', 20)
+        self.publish_rate = rospy.get_param('~publish_rate', 20.0)
 
         self.gateway = rospy.get_param('~gateway')
         self.key = rospy.get_param('~key', None)
 
         self.lights_param = rospy.get_param('~lights', None)
 
-        transition_time = rospy.get_param('~transition_time', 0.5) # in seconds
+        transition_time = rospy.get_param('~transition_time', 0.0) # in seconds
         self.transition_time = int(transition_time / 0.1) # in 0.1 of a second
 
         rospack = rospkg.RosPack()
@@ -38,6 +40,8 @@ class TradfriRos:
         self.conf = load_json(self.psk_config_file)
 
         self.connected = False
+
+        self.color_cmd = None
 
         try:
             identity = self.conf[self.gateway].get('identity')
@@ -122,7 +126,8 @@ class TradfriRos:
 
             # pub = rospy.Publisher('light{}/color'.format(params['alias']), ColorRGBA, queue_size=10)
             # self.pubs_color[dev_id] = pub
-            # self.observe(self.api, self.lights[dev_id])
+
+            self.observe(self.api, self.lights[dev_id])
 
         if len(self.lights_param):
             self.sub_set_all = rospy.Subscriber('all_lights/set_color', ColorRGBA, self.set_all_color_cb)
@@ -132,22 +137,25 @@ class TradfriRos:
     def observe(self, api, device):
         def callback(updated_device):
             light = updated_device.light_control.lights[0]
-            dev_id = hex(light.device.id)
-            x, y = light.xy_color[0], light.xy_color[1]
-            r, g, b, a = self.xyb_to_rgba(x, y, light.dimmer)
+            # dev_id = hex(light.device.id)
+            # x, y = light.xy_color[0], light.xy_color[1]
+            # r, g, b, a = self.xyb_to_rgba(x, y, light.dimmer)
 
-            self.pubs_color[dev_id].publish(ColorRGBA(r, g, b, a))
+            # self.pubs_color[dev_id].publish(ColorRGBA(r, g, b, a))
             rospy.logdebug("Received message for: %s" % light)
+            pass
 
         def err_callback(err):
-            rospy.logerr(err)
+            # rospy.logerr(err)
+            self.api(device.observe(callback, err_callback, duration=5.0))
+            # pass
 
         def worker():
-            self.api(device.observe(callback, err_callback))
+            self.api(device.observe(callback, err_callback, duration=5.0))
 
         threading.Thread(target=worker, daemon=True).start()
         rospy.loginfo('Sleeping to start observation task')
-        time.sleep(1)
+        time.sleep(0.5)
 
     def xyb_to_rgba(self, x, y, dimmer):
         _x = x / 65535
@@ -172,6 +180,25 @@ class TradfriRos:
 
         return val
 
+    def throttle(self, dur, hashables, func, *args, **kwargs):
+        if not hasattr(self, 'throttle_cache'):
+            self.throttle_cache = {}
+
+        now = rospy.Time.now()
+        h = hash(func)
+        if hashables and isinstance(hashables, list):
+            for val in hashables:
+                h ^= hash(val)
+
+        if h in self.throttle_cache:
+            last_time = self.throttle_cache[h]
+            if now - last_time < dur:
+                return None
+
+        self.throttle_cache[h] = now
+
+        return func(*args, **kwargs)
+
     def make_color_cmd(self, msg, dev_id):
         light = self.lights[dev_id]
 
@@ -183,21 +210,44 @@ class TradfriRos:
         # Convert XYZ to XY
         set_color_cmd = None
         div = (xyz.xyz_x + xyz.xyz_y + xyz.xyz_z)
+        # rospy.logwarn('Light {}'.format(light.light_control.lights[0]))
         if div > 0:
             x = xyz.xyz_x / div * 65535
             y = xyz.xyz_y / div * 65535
-            set_color_cmd = light.light_control.set_xy_color(int(x), int(y), transition_time=self.transition_time)
 
-        set_brightness_cmd = light.light_control.set_dimmer(int(a * 254), transition_time=self.transition_time)
+            x_val = int(x)
+            y_val = int(y)
 
-        if set_color_cmd:
+            if (x_val, y_val) != light.light_control.lights[0].xy_color:
+                rospy.logwarn('Color; new: {}, old: {}'.format((x_val, y_val), light.light_control.lights[0].xy_color))
+                set_color_cmd = light.light_control.set_xy_color(x_val, y_val, transition_time=self.transition_time)
+
+            # set_color_cmd = light.light_control.set_xy_color(x_val, y_val, transition_time=self.transition_time)
+
+        dimmer_val = int(a * 254)
+        set_brightness_cmd = None
+
+        if dimmer_val != light.light_control.lights[0].dimmer:
+            rospy.logwarn('Dimmer; new: {}, old: {}'.format(dimmer_val, light.light_control.lights[0].dimmer))
+            set_brightness_cmd = light.light_control.set_dimmer(dimmer_val, transition_time=self.transition_time)
+
+        # set_brightness_cmd = light.light_control.set_dimmer(dimmer_val, transition_time=self.transition_time)
+
+        # # If we changed the values, let's observe
+        # if set_color_cmd or set_brightness_cmd:
+        #     self.observe(self.api, self.lights[dev_id])
+        if set_color_cmd and set_brightness_cmd:
             set_color_cmd.combine_data(set_brightness_cmd)
             return set_color_cmd
         else:
             return set_brightness_cmd
 
     def set_color_cb(self, msg, dev_id):
-        self.api(self.make_color_cmd(msg, dev_id))
+        color_cmd = self.make_color_cmd(msg, dev_id)
+        if color_cmd:
+        #     # Throttle at 10 Hz rate
+            # self.throttle(rospy.Duration(0.4), [dev_id], self.api, color_cmd, timeout=0.1)
+            self.api(color_cmd, timeout=0.1)
 
     def set_all_color_cb(self, msg):
         for dev_id in self.lights.keys():
@@ -221,9 +271,18 @@ class TradfriRos:
         loop_rate = rospy.Rate(self.publish_rate)
 
         while not rospy.is_shutdown():
+            # if self.color_cmd:
+            #     try:
+            #         self.api(self.color_cmd, timeout=0.1)
+            #     except RequestTimeout:
+            #         rospy.logwarn('Request timeout')
+
             loop_rate.sleep()
 
 if __name__ == '__main__':
+    print("Deprecated. Please use tradfri_async_node.py instead")
+    sys.exit(-1)
+
     rospy.init_node('tradfri_ros')
 
     tradfri = TradfriRos()
