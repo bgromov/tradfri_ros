@@ -22,7 +22,7 @@ from std_msgs.msg import ColorRGBA
 class TradfriAsyncRos:
     def __init__(self):
         self.gateway_address = rospy.get_param('~gateway_address')
-        self.psk_key = rospy.get_param('~psk_key', None)
+        self.security_code = rospy.get_param('~security_code', None)
 
         self.lights_param = rospy.get_param('~lights', None)
 
@@ -46,7 +46,7 @@ class TradfriAsyncRos:
             api_factory = APIFactory(host=self.gateway_address, psk_id=identity)
 
             try:
-                psk = await api_factory.generate_psk(self.psk_key)
+                psk = await api_factory.generate_psk(self.security_code)
                 # rospy.loginfo('Generated PSK: {}'.format(psk))
 
                 self.conf[self.gateway_address] = {'identity': identity,
@@ -57,7 +57,7 @@ class TradfriAsyncRos:
             except AttributeError:
                 rospy.logfatal("Please provide the 'Security Code' from the "
                                "back of your Tradfri gateway using the "
-                               "~psk_key param.")
+                               "~security_code param.")
                 raise
             except RequestTimeout as e:
                 rospy.logfatal(e.message)
@@ -65,7 +65,7 @@ class TradfriAsyncRos:
 
             except Exception as e:
                 rospy.logfatal("Unknown error occurred. Make sure to provide the "
-                               "correct 'Security Code' to ~psk_key param and "
+                               "correct 'Security Code' to ~security_code param and "
                                "gateway IP address to ~gateway_address")
                 sys.exit(-1)
 
