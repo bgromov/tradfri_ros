@@ -26,7 +26,7 @@ class TradfriAsyncRos:
 
         self.lights_param = rospy.get_param('~lights', None)
 
-        transition_time = rospy.get_param('~transition_time', 0.0) # in seconds
+        transition_time = rospy.get_param('~transition_time', 0.5) # in seconds
         self.transition_time = int(transition_time / 0.1) # in 0.1 of a second
 
         rospack = rospkg.RosPack()
