@@ -132,7 +132,7 @@ class TradfriAsyncRos:
 
         if not self.lights_param:
             # if no lights configured, set the param with default values
-            self.lights_param = {k: {'alias_id': idx+1} for idx, k in enumerate(self.lights.keys())}
+            self.lights_param = {k: {'alias_id': idx+1} for idx, k in enumerate(sorted(self.lights.keys()))}
             rospy.set_param('~lights', self.lights_param)
 
         # Print all lights
