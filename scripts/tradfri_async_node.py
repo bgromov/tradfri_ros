@@ -159,15 +159,15 @@ class TradfriAsyncRos:
 
 
         # Create subscribers for configured lights
-        self.subs_set_color = []
+        self.subs_color = []
         self.pubs_color = {}
         for dev_id, params in self.lights_param.items():
-            func = partial(self.set_color_cb, dev_id=dev_id)
-            sub = rospy.Subscriber('light{}/set_color'.format(params['alias_id']), ColorRGBA, func)
-            self.subs_set_color.append(sub)
+            func = partial(self.color_cb, dev_id=dev_id)
+            sub = rospy.Subscriber('light{}/color'.format(params['alias_id']), ColorRGBA, func)
+            self.subs_color.append(sub)
 
         if len(self.lights_param):
-            self.sub_set_all = rospy.Subscriber('all_lights/set_color', ColorRGBA, self.set_all_color_cb)
+            self.sub_all_color = rospy.Subscriber('all_lights/color', ColorRGBA, self.all_color_cb)
 
         rospy.loginfo('Ready')
 
@@ -245,7 +245,7 @@ class TradfriAsyncRos:
         else:
             return set_brightness_cmd
 
-    def set_color_cb(self, msg, dev_id):
+    def color_cb(self, msg, dev_id):
         color_cmd = self.make_color_cmd(msg, dev_id)
         if color_cmd:
             # Throttle at ~6 Hz rate
@@ -256,9 +256,9 @@ class TradfriAsyncRos:
             ## Ignore throttling
             # asyncio.ensure_future(self.api(color_cmd), loop=self.event_loop)
 
-    def set_all_color_cb(self, msg):
+    def all_color_cb(self, msg):
         for dev_id in self.lights.keys():
-            self.set_color_cb(msg, dev_id)
+            self.color_cb(msg, dev_id)
 
     async def wait_ros(self):
         while not rospy.is_shutdown():
